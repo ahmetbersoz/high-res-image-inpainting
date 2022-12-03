@@ -1,4 +1,5 @@
 from PIL import Image
+import copy
 import sys, getopt
 import os
 import cv2
@@ -148,7 +149,9 @@ def main(argv):
         
         # read image and mask
         img = io.imread(image_path)
-        mask = io.imread(mask_path)     
+        mask = io.imread(mask_path)   
+
+        org_shape = copy.deepcopy(img.shape)  
 
         # downscale image since gpu memory is limited
         if (img.shape[0] > max_size or img.shape[1] > max_size):
@@ -164,6 +167,7 @@ def main(argv):
 
         image = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
         shape = image.shape
+        org_shape = copy.deepcopy(shape)
 
         image = pad_image(image)
         mask = pad_image(mask)
@@ -184,7 +188,7 @@ def main(argv):
 
         # resizing image to original size
         output_image = cv2.imread(output_path)
-        output_image = cv2.resize(output_image, (shape[1], shape[0]))
+        output_image = cv2.resize(output_image, (org_shape[1], org_shape[0]))
         cv2.imwrite(output_path, output_image)          
 
         # copying metadata
