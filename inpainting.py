@@ -167,7 +167,6 @@ def main(argv):
 
         image = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
         shape = image.shape
-        org_shape = copy.deepcopy(shape)
 
         image = pad_image(image)
         mask = pad_image(mask)
