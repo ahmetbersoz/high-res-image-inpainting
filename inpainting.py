@@ -5,7 +5,7 @@ import cv2
 import torch
 import numpy as np
 from torch import nn
-from skimage import io
+from skimage import io, transform
 import scipy.ndimage
 from DFNet_core import DFNet
 import matplotlib.pyplot as plt
@@ -107,16 +107,17 @@ def main(argv):
     masks_folder = ''
     output_folder = ''
     weights_folder = ''
+    max_size = 2048
 
     try:
-        opts, args = getopt.getopt(argv,"hi:m:o:w:",["images_folder=","masks_folder=","output_folder", "weights_folder="])
+        opts, args = getopt.getopt(argv,"hi:m:o:w:s:",["images_folder=","masks_folder=","output_folder", "weights_folder=", "max_size="])
     except getopt.GetoptError:
-        print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder>')
+        print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder> -s <max_size>')
         sys.exit(2)
 
     for opt, arg in opts:
         if opt == '-h':
-            print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder>')
+            print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder> -s <max_size>')
             sys.exit()
         elif opt in ("-i", "--images_folder"):
             images_folder = arg
@@ -126,8 +127,15 @@ def main(argv):
             output_folder = arg
         elif opt in ("-w", "--weights_folder"):
             weights_folder = arg
+        elif opt in ("-s", "--max_size"):
+            max_size = int(arg)
 
     for image_name in os.listdir(os.path.join(images_folder)):
+        # only process valid images
+        if (not image_name.endswith('.jpg')) and (not image_name.endswith('.png')):
+            print("Not processing: ", image_name)
+            continue     
+
         print("Processing: ", image_name)
 
         image_path = os.path.join(images_folder, image_name)
@@ -146,6 +154,11 @@ def main(argv):
             mask = mask[..., np.newaxis]
 
         assert img.shape[:2] == mask.shape[:2]
+
+        # downscale image since gpu memory is limited
+        if (img.shape[0] > max_size or img.shape[1] > max_size):
+            img = transform.resize(img, (max_size, max_size))
+            mask = transform.resize(mask, (max_size, max_size))
 
         mask = mask[..., :1]
 
