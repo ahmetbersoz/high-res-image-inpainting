@@ -162,7 +162,7 @@ def main(argv):
 
         mask = mask[..., :1]
 
-        image = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        image = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
         shape = image.shape
 
         image = pad_image(image)
