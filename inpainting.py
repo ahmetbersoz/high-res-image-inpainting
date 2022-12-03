@@ -130,8 +130,15 @@ def main(argv):
     for image_name in os.listdir(os.path.join(images_folder)):
         print("Processing: ", image_name)
 
-        img = io.imread(os.path.join(images_folder, image_name))
-        mask = io.imread(os.path.join(masks_folder, image_name))
+        image_path = os.path.join(images_folder, image_name)
+
+        # find masks without extension
+        for mask_name in os.listdir(os.path.join(masks_folder)):
+            if (os.path.splitext(image_name)[0] == os.path.splitext(mask_name)[0]):
+                mask_path = os.path.join(masks_folder, mask_name)
+        
+        img = io.imread(image_path)
+        mask = io.imread(mask_path)
 
         if len(mask.shape) != 3:
             mask = mask[..., np.newaxis]
