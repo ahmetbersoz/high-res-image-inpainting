@@ -167,7 +167,12 @@ def main(argv):
         out = preprocess_image(image, mask, DFNET_output, Refinement_model)
 
         out = out[:shape[0], :shape[1], ...][..., :3]
-        plt.imsave(output_path, out)    
+        plt.imsave(output_path, out)  
+
+        # resizing image to original size
+        output_image = cv2.imread(output_path)
+        output_image = cv2.resize(output_image, (shape[1], shape[0]))
+        cv2.imwrite(output_path, output_image)          
 
         # copying metadata
         source_metadata = pyexiv2.Image(image_path).read_exif()
