@@ -133,7 +133,7 @@ def main(argv):
 
     for image_name in os.listdir(os.path.join(images_folder)):
         # only process valid images
-        if (not image_name.endswith('.jpg')) and (not image_name.endswith('.png')):
+        if (not image_name.lower().endswith('.jpg')) and (not image_name.lower().endswith('.png')):
             print("Not processing: ", image_name)
             continue     
 
