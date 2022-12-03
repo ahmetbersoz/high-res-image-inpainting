@@ -1,4 +1,4 @@
-# import pyexiv2
+from PIL import Image
 import sys, getopt
 import os
 import cv2
@@ -187,11 +187,11 @@ def main(argv):
         output_image = cv2.resize(output_image, (shape[1], shape[0]))
         cv2.imwrite(output_path, output_image)          
 
-        # # copying metadata
-        # source_metadata = pyexiv2.Image(image_path).read_exif()
-        # destination = pyexiv2.Image(output_path)
-        # destination.modify_exif(source_metadata)
-        # destination.close()
+        # copying metadata
+        source = Image.open(image_path)
+        exif = source.getexif()
+        image_new = Image.open(output_path)
+        image_new.save(output_path, exif=exif)
 
 if __name__ == "__main__":
    main(sys.argv[1:])

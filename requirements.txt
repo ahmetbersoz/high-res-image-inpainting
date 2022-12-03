@@ -5,4 +5,4 @@ torchvision
 scipy
 scikit-image
 matplotlib
-pyexiv2
+exif

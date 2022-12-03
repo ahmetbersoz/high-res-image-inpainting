@@ -2,3 +2,4 @@ images
 masks
 weights
 outputs
+__pycache__
