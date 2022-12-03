@@ -1,4 +1,4 @@
-import pyexiv2
+# import pyexiv2
 import sys, getopt
 import os
 import cv2
@@ -150,15 +150,15 @@ def main(argv):
         img = io.imread(image_path)
         mask = io.imread(mask_path)     
 
+        # downscale image since gpu memory is limited
+        if (img.shape[0] > max_size or img.shape[1] > max_size):
+            img = cv2.resize(img, (max_size, max_size)) 
+            mask = cv2.resize(mask, (max_size, max_size))         
+        
         if len(mask.shape) != 3:
             mask = mask[..., np.newaxis]
 
         assert img.shape[:2] == mask.shape[:2]
-
-        # downscale image since gpu memory is limited
-        if (img.shape[0] > max_size or img.shape[1] > max_size):
-            img = transform.resize(img, (max_size, max_size))
-            mask = transform.resize(mask, (max_size, max_size))
 
         mask = mask[..., :1]
 
@@ -187,11 +187,11 @@ def main(argv):
         output_image = cv2.resize(output_image, (shape[1], shape[0]))
         cv2.imwrite(output_path, output_image)          
 
-        # copying metadata
-        source_metadata = pyexiv2.Image(image_path).read_exif()
-        destination = pyexiv2.Image(output_path)
-        destination.modify_exif(source_metadata)
-        destination.close()
+        # # copying metadata
+        # source_metadata = pyexiv2.Image(image_path).read_exif()
+        # destination = pyexiv2.Image(output_path)
+        # destination.modify_exif(source_metadata)
+        # destination.close()
 
 if __name__ == "__main__":
    main(sys.argv[1:])
