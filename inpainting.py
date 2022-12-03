@@ -1,3 +1,4 @@
+import pyexiv2
 import sys, getopt
 import os
 import cv2
@@ -130,6 +131,7 @@ def main(argv):
         print("Processing: ", image_name)
 
         image_path = os.path.join(images_folder, image_name)
+        output_path = os.path.join(output_folder, image_name)
 
         # find masks without extension
         for mask_name in os.listdir(os.path.join(masks_folder)):
@@ -138,7 +140,7 @@ def main(argv):
         
         # read image and mask
         img = io.imread(image_path)
-        mask = io.imread(mask_path)
+        mask = io.imread(mask_path)     
 
         if len(mask.shape) != 3:
             mask = mask[..., np.newaxis]
@@ -165,7 +167,13 @@ def main(argv):
         out = preprocess_image(image, mask, DFNET_output, Refinement_model)
 
         out = out[:shape[0], :shape[1], ...][..., :3]
-        plt.imsave(os.path.join(output_folder, image_name), out)            
+        plt.imsave(output_path, out)    
+
+        # copying metadata
+        source_metadata = pyexiv2.Image(image_path).read_exif()
+        destination = pyexiv2.Image(output_path)
+        destination.modify_exif(source_metadata)
+        destination.close()
 
 if __name__ == "__main__":
    main(sys.argv[1:])
