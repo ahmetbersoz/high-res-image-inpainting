@@ -110,7 +110,6 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv,"hi:m:o:w:",["images_folder=","masks_folder=","output_folder", "weights_folder="])
     except getopt.GetoptError:
-        print('la')
         print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder>')
         sys.exit(2)
 
@@ -137,6 +136,7 @@ def main(argv):
             if (os.path.splitext(image_name)[0] == os.path.splitext(mask_name)[0]):
                 mask_path = os.path.join(masks_folder, mask_name)
         
+        # read image and mask
         img = io.imread(image_path)
         mask = io.imread(mask_path)
 
@@ -157,10 +157,13 @@ def main(argv):
         DFNet_model.load_state_dict(torch.load(os.path.join(weights_folder, 'model_places2.pth'), map_location=device))
         DFNet_model.eval()
         DFNET_output = preprocess_image_dfnet(image, mask, DFNet_model)
+
         Refinement_model = RefinementNet().to(device)
         Refinement_model.load_state_dict(torch.load(os.path.join(weights_folder, 'refinement.pth'), map_location=device)['state_dict'])
         Refinement_model.eval()
+
         out = preprocess_image(image, mask, DFNET_output, Refinement_model)
+
         out = out[:shape[0], :shape[1], ...][..., :3]
         plt.imsave(os.path.join(output_folder, image_name), out)            
 
