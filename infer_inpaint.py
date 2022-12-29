@@ -1,3 +1,5 @@
+from mmdet.apis import inference_detector, init_detector, show_result_pyplot
+import math
 from PIL import Image
 import copy
 import sys, getopt
@@ -5,14 +7,15 @@ import os
 import cv2
 import torch
 import numpy as np
-from torch import nn
 from skimage import io, transform
 import scipy.ndimage
 from DFNet_core import DFNet
 import matplotlib.pyplot as plt
 from RefinementNet_core import RefinementNet
+from tqdm import tqdm
 
 device = torch.device('cpu')
+# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def to_numpy(tensor):
     tensor = tensor.mul(255).byte().data.cpu().numpy()
@@ -104,105 +107,122 @@ def pad_image(image):
     return padded
 
 def main(argv):
-    images_folder = '/home/abe/Workspace/dataset/arcadium2/images/'
-    masks_folder = '/home/abe/Workspace/dataset/arcadium2/masks/'
-    output_folder = '/home/abe/Workspace/dataset/arcadium2/inpainted_highres/'
-    weights_folder = '/home/abe/Workspace/high-res-image-inpainting/weights/'
+    dataset = 'aski'
+    cwd = os.getcwd()
+
+    images_folder = cwd + '/dataset/' + dataset + '/images/'
+    masks_folder = cwd + '/dataset/' + dataset + '/masks'
+    inpainted_folder = cwd + '/dataset/' + dataset + '/inpainted_images/'
+    inpainting_weights_folder = cwd + '/weights'
     max_size = 2048
+    detected_folder = cwd + '/dataset/' + dataset + '/detected_images/'
+    thresh = 0.5
+    config_path = cwd + '/config/cmDb_config_v64.py'
+    model_path = cwd + '/model/latest.pth'
 
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    if not os.path.exists(masks_folder):
+        os.makedirs(masks_folder)
 
-    try:
-        opts, args = getopt.getopt(argv,"hi:m:o:w:s:",["images_folder=","masks_folder=","output_folder", "weights_folder=", "max_size="])
-    except getopt.GetoptError:
-        print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder> -s <max_size>')
-        sys.exit(2)
+    if not os.path.exists(inpainted_folder):
+        os.makedirs(inpainted_folder)
 
-    for opt, arg in opts:
-        if opt == '-h':
-            print('inpainting.py -i <images_folder> -m <masks_folder> -o <output_folder> -w <weights_folder> -s <max_size>')
-            sys.exit()
-        elif opt in ("-i", "--images_folder"):
-            images_folder = arg
-        elif opt in ("-m", "--masks_folder"):
-            masks_folder = arg
-        elif opt in ("-o", "--output_folder"):
-            output_folder = arg
-        elif opt in ("-w", "--weights_folder"):
-            weights_folder = arg
-        elif opt in ("-s", "--max_size"):
-            max_size = int(arg)
+    if not os.path.exists(detected_folder):
+        os.makedirs(detected_folder)
 
-    for image_name in os.listdir(os.path.join(images_folder)):
+    # initialize the model
+    model = init_detector(config_path, model_path, device=torch.device('cpu'))
+
+    total_image = len(os.listdir(images_folder))
+
+    for i, image_name in enumerate(os.listdir(os.path.join(images_folder))):
         # only process valid images
         if (not image_name.lower().endswith('.jpg')) and (not image_name.lower().endswith('.png')):
             print("Not processing: ", image_name)
             continue     
 
-        print("Processing: ", image_name)
+        print("Processing: ", image_name + " (" + str(i + 1) + "/" + str(total_image) + ")")
 
         image_path = os.path.join(images_folder, image_name)
-        output_path = os.path.join(output_folder, image_name)
-
-        # find masks without extension
-        for mask_name in os.listdir(os.path.join(masks_folder)):
-            if (os.path.splitext(image_name)[0] == os.path.splitext(mask_name)[0]):
-                mask_path = os.path.join(masks_folder, mask_name)
+        output_path = os.path.join(inpainted_folder, image_name)
         
-        # read image and mask
+        #### detecting image masks
+        result = inference_detector(model, image_path)
         img = io.imread(image_path)
-        mask = io.imread(mask_path)   
+        image_mask = np.full((img.shape[0], img.shape[1], 3), (0, 0, 0), dtype=int)
 
-        org_shape = copy.deepcopy(img.shape)  
+        bboxes = result[0]
+        masks = result[1]
+        instance_detected = False
 
-        # downscale image since gpu memory is limited
-        if (img.shape[0] > max_size or img.shape[1] > max_size):
-            img = cv2.resize(img, (max_size, max_size)) 
-            mask = cv2.resize(mask, (max_size, max_size))         
+        # for each class indices
+        for k, value in enumerate(np.asarray(model.CLASSES)):
+            # for each bboxes in class
+            for bbox, mask in zip(bboxes[k], masks[k]):
+                # bbox[4] is probability
+                if (bbox[4] >= thresh):
+                    instance_detected = True
+                    # looping image bbox pixels
+                    for i in range(math.floor(bbox[1]), math.ceil(bbox[3])):
+                        for j in range(math.floor(bbox[0]), math.ceil(bbox[2])):
+                            if (mask[i][j]):
+                                image_mask[i][j][:] = 255
         
-        if len(mask.shape) != 3:
-            mask = mask[..., np.newaxis]
+        if (instance_detected):
+            model.show_result(images_folder + image_name, result, score_thr=thresh, out_file=detected_folder + image_name) 
 
-        assert img.shape[:2] == mask.shape[:2]
+            # write and read image mask
+            mask_path = os.path.join(masks_folder, os.path.splitext(image_name)[0] + '.png')
+            cv2.imwrite(mask_path, image_mask)
 
-        mask = mask[..., :1]
+            image_mask = io.imread(mask_path)   
 
-        image = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
-        shape = image.shape
+            org_shape = copy.deepcopy(img.shape)  
 
-        image = pad_image(image)
-        mask = pad_image(mask)
+            # downscale image since gpu memory is limited
+            if (img.shape[0] > max_size or img.shape[1] > max_size):
+                img = cv2.resize(img, (max_size, max_size)) 
+                image_mask = cv2.resize(image_mask, (max_size, max_size))         
+            
+            if len(image_mask.shape) != 3:
+                image_mask = image_mask[..., np.newaxis]
 
-        DFNet_model = DFNet().to(device)
-        DFNet_model.load_state_dict(torch.load(os.path.join(weights_folder, 'model_places2.pth'), map_location=device))
-        DFNet_model.eval()
-        DFNET_output = preprocess_image_dfnet(image, mask, DFNet_model)
+            assert img.shape[:2] == image_mask.shape[:2]
 
-        Refinement_model = RefinementNet().to(device)
-        Refinement_model.load_state_dict(torch.load(os.path.join(weights_folder, 'refinement.pth'), map_location=device)['state_dict'])
-        Refinement_model.eval()
+            image_mask = image_mask[..., :1]
 
-        out = preprocess_image(image, mask, DFNET_output, Refinement_model)
+            image = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
+            shape = image.shape
 
-        out = out[:shape[0], :shape[1], ...][..., :3]
-        plt.imsave(output_path, out)  
+            image = pad_image(image)
+            image_mask = pad_image(image_mask)
 
-        # resizing image to original size
-        output_image = cv2.imread(output_path)
-        output_image = cv2.resize(output_image, (org_shape[1], org_shape[0]))
-        cv2.imwrite(output_path, output_image)          
+            DFNet_model = DFNet().to(device)
+            DFNet_model.load_state_dict(torch.load(os.path.join(inpainting_weights_folder, 'model_places2.pth'), map_location=device))
+            DFNet_model.eval()
+            DFNET_output = preprocess_image_dfnet(image, image_mask, DFNet_model)
 
-        # copying metadata
-        source = Image.open(image_path)
-        exif = source.getexif()
-        image_new = Image.open(output_path)
-        image_new.save(output_path, exif=exif)
+            Refinement_model = RefinementNet().to(device)
+            Refinement_model.load_state_dict(torch.load(os.path.join(inpainting_weights_folder, 'refinement.pth'), map_location=device)['state_dict'])
+            Refinement_model.eval()
 
+            out = preprocess_image(image, image_mask, DFNET_output, Refinement_model)
+
+            out = out[:shape[0], :shape[1], ...][..., :3]
+            plt.imsave(output_path, out)  
+
+            # resizing image to original size
+            output_image = cv2.imread(output_path)
+            output_image = cv2.resize(output_image, (org_shape[1], org_shape[0]))
+            cv2.imwrite(output_path, output_image)          
+
+            # copying metadata
+            source = Image.open(image_path)
+            exif = source.getexif()
+            image_new = Image.open(output_path)
+            image_new.save(output_path, exif=exif)
+
+        del image_mask
+        del img
+        del result
 if __name__ == "__main__":
    main(sys.argv[1:])
-   
-
-            
-
-
